@@ -1,0 +1,159 @@
+---
+title: "Practical Machine Learning Project"
+author: "Edric Kaw"
+date: "11/25/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+## Project Introduction
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Libraries
+
+Loading the required libraries
+
+```{r library}
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+```
+
+## Data Loading
+
+```{r data_load}
+training    <- read.csv('pml-training.csv', header=T)
+validation  <- read.csv('pml-testing.csv', header=T)
+dim(training)
+dim(validation)
+str(training)
+```
+
+## Data Cleansing
+
+From the data structure shown above, noticed that the first seven columns have only little impact to the predictors "classe" and there are many columns with missing values.
+
+Data cleansing process will remove the columns with more than 80% of missing values.
+
+```{r data_clean}
+# Remove the first seven columns as they have little impact to the outcome classes
+training_1    <- training[,-c(1:7)]
+validation_1 <- validation[,-c(1:7)]
+
+
+# Remove columns with more than 99% of missing values for training dataset
+Train_Na_Col <- which(colSums(is.na(training_1) |training_1=="")>0.9*dim(training_1)[1]) 
+training_1 <- training_1[,-Train_Na_Col]
+
+# Remove columns with more than 80% of missing values for validation dataset
+Valid_Na_Col <- which(colSums(is.na(validation_1) |validation_1=="")>0.9*dim(validation_1)[1]) 
+validation_1 <- validation_1[,-Valid_Na_Col]
+dim(training_1)
+dim(validation_1)
+
+```
+
+From the data cleansing process, the dataset left only 53 variables to be used in the prediction.
+
+## Data Processing
+
+Splitting dataset (training dataset) into 75% (training dataset) and 25% (testing dataset) for prediction purposes.
+
+Validation data (originally named testing dataset) will be used later for validation purposes.
+
+```{r data_processing}
+set.seed(123)
+inTrain <- createDataPartition(training_1$classe, p=0.75, list=FALSE)
+trainData <- training_1[inTrain,]
+testData  <- training_1[-inTrain,]
+dim(trainData)
+dim(testData)
+```
+
+## Model Building
+
+In this section, we will using trainData to build three models:  
+1. Classification tree 
+2. Random Forest
+3. Gradient Boosting Method
+
+### Prediction using Classification Tree Model:
+
+```{r Classification_Tree_Train}
+ClassTreeModel <- rpart(classe ~ ., data=trainData, method="class")
+fancyRpartPlot(ClassTreeModel)
+```
+
+Testing the accuracy of classification tree model using Test Data
+
+```{r Classification_Tree_Test}
+PredictClassTreeModel <- predict(ClassTreeModel, testData, type = "class")
+cmClassTree <- confusionMatrix(PredictClassTreeModel, testData$classe)
+cmClassTree
+```
+
+Plot matrix result for Classification Tree model:
+
+```{r CT_Matrix}
+plot(cmClassTree$table, col = cmClassTree$byClass,
+     main = paste("Decision Tree Confusion Matrix: Accuracy =", ... = round(cmClassTree$overall['Accuracy'], 4)))
+```
+
+### Prediction using Random Forest:
+
+```{r Random_Forest_Train}
+set.seed(123)
+trControl <- trainControl(method="cv", number=3, verboseIter = FALSE)
+randomForestModel <- train(classe ~ ., data=trainData, method="rf", trControl = trControl, verbose=FALSE)
+randomForestModel
+plot(randomForestModel)
+PredictionRandomForestModel <- predict(randomForestModel, testData)
+cmRandomForest <- confusionMatrix(PredictionRandomForestModel, testData$classe)
+cmRandomForest
+```
+
+Plot matrix result for Random Forest Model:
+
+```{r RF_Matrix}
+plot(cmRandomForest$table, col = cmRandomForest$byClass,
+                main = paste("Random Forest Confusion Matrix: Accuracy =", round(cmRandomForest$overall['Accuracy'],4)))
+```
+
+
+### Prediction using Gradient Boosting Method:
+
+```{r gbm}
+GBMModel <- train(classe~., data=trainData, method="gbm", trControl=trControl, verbose=FALSE)
+GBMModel
+plot(GBMModel)
+PredictionGBMModel <- predict(GBMModel, testData)
+cmGBM <- confusionMatrix(PredictionGBMModel, testData$classe)
+cmGBM
+plot(cmGBM$table, col = cmGBM$byClass, main = paste("GBM Confusion Matrix: Accuracy =", round(cmGBM$overall['Accuracy'], 4)))
+```
+
+## Conclusion
+
+*Random Forest Model* having the highest accuracy (*0.9943*) in prediction compared to other models.
+Out-of-sample-error is only 0.0557.
+
+## Data Validation
+
+For the data validation, we will using *random forest model* as it has the highest accuracy.
+
+
+```{r data_validation}
+Prediction <- predict(randomForestModel,newdata=validation_1)
+Prediction
+```
+
